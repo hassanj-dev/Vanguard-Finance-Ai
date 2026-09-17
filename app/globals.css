@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* ── DESIGN TOKENS ─────────────────────────────────────────────────────── */
+:root {
+  --bg: #060010;
+  --bg-2: #0b0616;
+  --panel: #120f17;
+  --panel-2: #17121f;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #f2eeff;
+  --muted: #b3abc4;
+  --accent: #5227ff;
+  --accent-soft: #b19eef;
+  --accent-wash: rgba(82, 39, 255, 0.14);
+  --up: #3bedb0;
+  --warn: #ffb020;
+  --over: #ff6b6b; /* Dashboard breakdown fix */
+  --spot: rgba(177, 158, 239, 0.14);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-2: #f6f3ff;
+  --panel: #ffffff;
+  --panel-2: #f6f3ff;
+  --line: rgba(18, 15, 23, 0.1);
+  --line-strong: rgba(18, 15, 23, 0.2);
+  --text: #120f17;
+  --muted: #514a60;
+  --accent: #5227ff;
+  --accent-soft: #5227ff;
+  --accent-wash: rgba(82, 39, 255, 0.08);
+  --up: #0b7a55;
+  --warn: #9a4b00;
+  --over: #d93838;
+  --spot: rgba(82, 39, 255, 0.07);
+  --shadow: 0 24px 60px rgba(18, 15, 23, 0.1);
+  color-scheme: light;
+}

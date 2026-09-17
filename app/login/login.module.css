@@ -1,0 +1,563 @@
+/* Tokens, reset, .num/.sr-only, :focus-visible and the reduced-motion block
+   all live in globals.css. Everything here is specific to the login screen. */
+
+.auth {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* Ambient background ------------------------------------------------------ */
+.aurora {
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 70vh;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(48% 55% at 22% 18%, rgba(82, 39, 255, 0.3), transparent 70%),
+    radial-gradient(42% 50% at 78% 8%, rgba(177, 158, 239, 0.18), transparent 70%);
+  filter: blur(20px);
+}
+:global([data-theme="light"]) .aurora {
+  opacity: 0.5;
+}
+
+.gridField {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 68px 68px;
+  mask-image: radial-gradient(70% 55% at 50% 0%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(70% 55% at 50% 0%, #000 0%, transparent 78%);
+  opacity: 0.6;
+}
+
+/* Single-class specificity so any later layer can beat it with one class. */
+.auth > * {
+  position: relative;
+  z-index: 1;
+}
+.auth > .aurora,
+.auth > .gridField {
+  position: fixed;
+  z-index: 0;
+}
+
+/* Top bar ----------------------------------------------------------------- */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 22px 24px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.logo {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.backLink:hover {
+  color: var(--text);
+}
+.backLink svg {
+  transition: transform 0.2s ease;
+}
+.backLink:hover svg {
+  transform: translateX(-2px);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.iconBtn:hover {
+  background: var(--accent-wash);
+  border-color: var(--accent-soft);
+}
+
+/* Layout ------------------------------------------------------------------ */
+.grid {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 24px 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 56px;
+  align-items: center;
+}
+
+/* Card -------------------------------------------------------------------- */
+.card {
+  position: relative;
+  overflow: hidden;
+  padding: 34px 32px 30px;
+  border-radius: 22px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+/* Static wash rather than a cursor spotlight — a form is a place to read,
+   and this way touch and keyboard users see the same thing as a mouse user. */
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(420px circle at 50% -10%, var(--spot), transparent 72%);
+}
+
+.cardHead {
+  margin-bottom: 26px;
+}
+.cardIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+  border: 1px solid var(--line-strong);
+}
+:global([data-theme="light"]) .cardIcon {
+  color: var(--accent);
+}
+
+.cardTitle {
+  font-size: 28px;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+}
+.revealLine {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.06em;
+}
+.revealLine > span {
+  display: block;
+}
+.cardSub {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Alert ------------------------------------------------------------------- */
+.alert {
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--over, #ff6b6b);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-color: color-mix(in srgb, var(--over, #ff6b6b) 35%, transparent);
+  background: rgba(255, 107, 107, 0.1);
+  background: color-mix(in srgb, var(--over, #ff6b6b) 10%, transparent);
+}
+
+/* Form -------------------------------------------------------------------- */
+.form {
+  display: grid;
+  gap: 16px;
+}
+.field {
+  display: grid;
+  gap: 7px;
+}
+.label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.inputIcon {
+  position: absolute;
+  left: 14px;
+  color: var(--muted);
+  pointer-events: none;
+  transition: color 0.2s;
+}
+.inputWrap:focus-within .inputIcon {
+  color: var(--accent-soft);
+}
+:global([data-theme="light"]) .inputWrap:focus-within .inputIcon {
+  color: var(--accent);
+}
+
+.inputWrap input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px 0 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.hasToggle input {
+  padding-right: 44px;
+}
+.inputWrap input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+.inputWrap input:hover {
+  border-color: var(--accent-soft);
+}
+.inputWrap input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-wash);
+}
+.inputWrap input[aria-invalid="true"] {
+  border-color: var(--over, #ff6b6b);
+}
+
+.pwToggle {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.pwToggle:hover {
+  color: var(--text);
+  background: var(--accent-wash);
+}
+
+/* Submit ------------------------------------------------------------------ */
+.submit {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  height: 50px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(82, 39, 255, 0.28);
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+.submit:hover:not(:disabled) {
+  background: #4620db;
+}
+.submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.submit:disabled {
+  opacity: 0.65;
+  cursor: default;
+  box-shadow: none;
+}
+.submit svg {
+  transition: transform 0.2s ease;
+}
+.submit:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aside {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.aside a {
+  color: var(--accent-soft);
+  font-weight: 500;
+  text-decoration: none;
+}
+.aside a:hover {
+  text-decoration: underline;
+}
+:global([data-theme="light"]) .aside a {
+  color: var(--accent);
+}
+
+/* Side panel -------------------------------------------------------------- */
+.side {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+}
+
+.tag {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px 6px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  background: var(--accent-wash);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.tagDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 0 4px rgba(59, 237, 176, 0.22);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--up) 22%, transparent);
+}
+
+.sideTitle {
+  font-size: clamp(24px, 2.6vw, 32px);
+  line-height: 1.18;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  max-width: 20ch;
+}
+.sideTitle em {
+  font-style: normal;
+  color: var(--accent-soft);
+}
+:global([data-theme="light"]) .sideTitle em {
+  color: var(--accent);
+}
+
+.sideList {
+  list-style: none;
+  display: grid;
+  gap: 11px;
+}
+.sideList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.sideList svg {
+  color: var(--up);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.mini {
+  max-width: 330px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.miniBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.miniAvatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+.miniMeta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.miniMeta strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.miniMeta small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.miniBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+.bubble {
+  max-width: 86%;
+  padding: 9px 13px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 14px;
+}
+.you {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.bot {
+  align-self: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-bottom-left-radius: 4px;
+}
+.miniNote {
+  padding: 0 14px 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.sideLegal {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 54ch;
+}
+
+/* Responsive -------------------------------------------------------------- */
+@media (max-width: 940px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    max-width: 440px;
+    padding-top: 8px;
+  }
+  .side {
+    order: 2;
+  }
+  .sideTitle {
+    font-size: 22px;
+    max-width: none;
+  }
+  .mini {
+    max-width: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .top {
+    padding: 16px;
+  }
+  .backLabel {
+    display: none;
+  }
+  .grid {
+    padding: 8px 16px 40px;
+  }
+  .card {
+    padding: 28px 22px 26px;
+    border-radius: 18px;
+  }
+  .cardTitle {
+    font-size: 25px;
+  }
+}
+.logoImg {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none !important;
+    border-top-color: rgba(255, 255, 255, 0.9);
+  }
+  .aurora {
+    display: none;
+  }
+}
