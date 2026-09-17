@@ -164,6 +164,9 @@ const STEPS: Step[] = [
 
 type Theme = "dark" | "light";
 
+// ── CHANGE: theme hook now flips the DOM attribute synchronously, and
+// briefly disables all CSS transitions on the whole tree so the switch is
+// instant instead of every bordered/shadowed element cross-fading at once.
 function useTheme() {
   const [theme, setTheme] = useState<Theme>("dark");
   const [ready, setReady] = useState(false);
@@ -174,9 +177,10 @@ function useTheme() {
     setReady(true);
   }, []);
 
+  // Persist only — the DOM attribute itself is set eagerly inside toggle(),
+  // not here, so the paint doesn't have to wait on a React re-render.
   useEffect(() => {
     if (!ready) return;
-    document.documentElement.setAttribute("data-theme", theme);
     try {
       window.localStorage.setItem("vg-theme", theme);
     } catch {
@@ -184,10 +188,23 @@ function useTheme() {
     }
   }, [theme, ready]);
 
-  const toggle = useCallback(
-    () => setTheme((t) => (t === "dark" ? "light" : "dark")),
-    [],
-  );
+  const toggle = useCallback(() => {
+    const root = document.documentElement;
+    const next: Theme =
+      root.getAttribute("data-theme") === "light" ? "dark" : "light";
+
+    // Kill transitions for one frame so nothing cross-fades.
+    root.classList.add("theme-switch");
+    root.setAttribute("data-theme", next);
+    setTheme(next);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        root.classList.remove("theme-switch");
+      });
+    });
+  }, []);
+
   return { theme, toggle };
 }
 
@@ -203,7 +220,6 @@ export default function LandingPage() {
     "idle",
   );
 
-  // ── CHANGE 1: session state ──────────────────────────────────────────────
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
@@ -217,7 +233,6 @@ export default function LandingPage() {
     });
     return () => subscription.unsubscribe();
   }, []);
-  // ────────────────────────────────────────────────────────────────────────
 
   const headerRef = useRef<HTMLElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -286,13 +301,11 @@ export default function LandingPage() {
     setStatus("done");
   };
 
-  // ── CHANGE 2: scroll to waitlist section ────────────────────────────────
   const handleEarlyAccess = () => {
     document
       .getElementById("waitlist-section")
       ?.scrollIntoView({ behavior: "smooth" });
   };
-  // ────────────────────────────────────────────────────────────────────────
 
   return (
     <main className={`${figtree.variable} ${mono.variable} page`}>
@@ -319,7 +332,6 @@ export default function LandingPage() {
           <div className="header-actions">
             <ThemeToggle theme={theme} onToggle={toggle} />
 
-            {/* ── CHANGE 1 applied: Login vs Dashboard ── */}
             {isLoggedIn ? (
               <button
                 className="btn btn-quiet nav-login"
@@ -336,7 +348,6 @@ export default function LandingPage() {
               </button>
             )}
 
-            {/* ── CHANGE 2 applied: scroll instead of route ── */}
             <button className="btn btn-solid" onClick={handleEarlyAccess}>
               Get early access
             </button>
@@ -390,7 +401,6 @@ export default function LandingPage() {
                 ))}
 
                 <div className="mobile-sheet-actions">
-                  {/* ── CHANGE 1 applied in mobile sheet ── */}
                   {isLoggedIn ? (
                     <button
                       className="btn btn-quiet"
@@ -413,7 +423,6 @@ export default function LandingPage() {
                     </button>
                   )}
 
-                  {/* ── CHANGE 2 applied in mobile sheet ── */}
                   <button
                     className="btn btn-solid"
                     onClick={() => {
@@ -676,7 +685,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── WAITLIST ── id added here for scroll target ─────────────────── */}
+      {/* ── WAITLIST ───────────────────────────────────────────────────── */}
       <section id="waitlist-section" className="section">
         <div className="shell">
           <div className="cta">
@@ -758,8 +767,6 @@ export default function LandingPage() {
 /* ── SMALL PIECES ────────────────────────────────────────────────────────── */
 
 function Logo({ theme }: { theme: Theme }) {
-  // Light theme background → dark/black wordmark logo (Image 2)
-  // Dark theme background → light/white wordmark logo (Image 1)
   const src =
     theme === "light" ? "/vanguard-logo-black.png" : "/vanguard-logo-white.png";
   return (
@@ -917,36 +924,36 @@ function Conversation() {
         </span>
       </div>
 
-  <div className="phone-body">
-  {THREAD.slice(0, shown).map((m, i) => (
-    <motion.div
-      key={i}
-      className={`bubble ${m.from}`}
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-    >
-      {m.text}
-    </motion.div>
-  ))}
+      <div className="phone-body">
+        {THREAD.slice(0, shown).map((m, i) => (
+          <motion.div
+            key={i}
+            className={`bubble ${m.from}`}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+          >
+            {m.text}
+          </motion.div>
+        ))}
 
-  <AnimatePresence mode="popLayout">
-    {typing && (
-      <motion.div
-        className="bubble bot typing"
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
-        aria-hidden="true"
-      >
-        <i />
-        <i />
-        <i />
-      </motion.div>
-    )}
-  </AnimatePresence>
-</div>
+        <AnimatePresence mode="popLayout">
+          {typing && (
+            <motion.div
+              className="bubble bot typing"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              aria-hidden="true"
+            >
+              <i />
+              <i />
+              <i />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div className="phone-input">
         <span>Type an amount and a category…</span>
@@ -1059,9 +1066,8 @@ function Limits() {
           <li key={b.name} className={`budget budget-${state}`}>
             <div className="budget-head">
               <span>{b.name}</span>
-              {/* Over hone par direct red text styling */}
-              <span 
-                className="num budget-left" 
+              <span
+                className="num budget-left"
                 style={isOver ? { color: "#ef4444" } : {}}
               >
                 {b.left}
@@ -1076,10 +1082,13 @@ function Limits() {
               aria-valuetext={`${b.used}% of the ${b.name} limit — ${b.left}`}
               aria-label={`${b.name} limit used`}
             >
-              {/* Over hone par direct red bar background styling */}
               <motion.span
                 className={state}
-                style={isOver ? { backgroundColor: "#ef4444", backgroundImage: "none" } : {}}
+                style={
+                  isOver
+                    ? { backgroundColor: "#ef4444", backgroundImage: "none" }
+                    : {}
+                }
                 initial={{ width: 0 }}
                 whileInView={{ width: `${Math.min(b.used, 100)}%` }}
                 viewport={{ once: true }}
@@ -1092,12 +1101,22 @@ function Limits() {
     </ul>
   );
 }
-  
 
 /* ── STYLES ──────────────────────────────────────────────────────────────── */
 
 const GLOBAL_CSS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── CHANGE: kills every transition tree-wide while the theme is flipping.
+   Toggled on/off via classList in useTheme() so the switch is one instant
+   paint instead of dozens of elements cross-fading their own transitions. */
+html.theme-switch,
+html.theme-switch *,
+html.theme-switch *::before,
+html.theme-switch *::after {
+  transition: none !important;
+  animation-duration: 0.01ms !important;
+}
 
 :root {
   --bg: #060010;
@@ -1138,14 +1157,13 @@ const GLOBAL_CSS = `
   --shadow: 0 20px 45px rgba(18,15,23,0.09), 0 2px 10px rgba(18,15,23,0.05);
   color-scheme: light;
 
-  /* distinct tone colors for the category stack/dots so they don't collide */
   --tone-a: #5227FF;
   --tone-b: #0EA5A0;
   --tone-c: #16A34A;
   --tone-d: #D97706;
   --tone-e: #8B85A0;
 }
-  [data-theme="light"] .tone-a { background: var(--tone-a); }
+[data-theme="light"] .tone-a { background: var(--tone-a); }
 [data-theme="light"] .tone-b { background: var(--tone-b); }
 [data-theme="light"] .tone-c { background: var(--tone-c); }
 [data-theme="light"] .tone-d { background: var(--tone-d); }
@@ -1183,21 +1201,6 @@ const GLOBAL_CSS = `
   mask-image: linear-gradient(90deg, transparent, #000 5%, #000 88%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 88%, transparent);
 }
-  [data-theme="light"] .spot,
-[data-theme="light"] .roadmap,
-[data-theme="light"] .feed-item {
-  box-shadow: 0 1px 2px rgba(18,15,23,0.04), 0 10px 26px rgba(18,15,23,0.06);
-}
-
-[data-theme="light"] .phone,
-[data-theme="light"] .vault,
-[data-theme="light"] .cta {
-  border-color: var(--line-strong);
-}
-
-[data-theme="light"] .phone-body {
-  background-image: radial-gradient(circle at 1px 1px, rgba(18,15,23,0.10) 1px, transparent 0);
-}
 
 html { scroll-behavior: smooth; }
 
@@ -1232,12 +1235,16 @@ a { color: inherit; }
 }
 [data-theme="light"] :focus-visible { outline-color: var(--accent); }
 
+/* ── CHANGE: removed the 20px blur filter — the radial gradients are soft
+   enough on their own, and filter: blur() on a full-viewport fixed layer is
+   one of the most expensive things a browser repaints, especially on theme
+   flips and on mobile GPUs. will-change hints the compositor instead. */
 .aurora {
   position: fixed; inset: -20% -10% auto -10%; height: 70vh; z-index: 0; pointer-events: none;
   background:
     radial-gradient(48% 55% at 22% 18%, rgba(82,39,255,0.30), transparent 70%),
     radial-gradient(42% 50% at 78% 8%, rgba(177,158,239,0.18), transparent 70%);
-  filter: blur(20px);
+  will-change: opacity;
 }
 [data-theme="light"] .aurora { opacity: 0.5; }
 
@@ -1288,6 +1295,7 @@ a { color: inherit; }
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
+  will-change: background-color;
 }
 .header-inner { display: flex; align-items: center; justify-content: space-between; height: 68px; }
 
