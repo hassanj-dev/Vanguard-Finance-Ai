@@ -50,7 +50,7 @@ const ALERT_WINDOW_DAYS = 5;
 
 // Single fixed logo — same in both light and dark mode, no theme switching.
 // Save the blue logo file to /public/vanguard-logo-blue.png for this to resolve.
-const LOGO_SRC = '/vanguard-logo-blue.png';
+const LOGO_SRC = '/favicon-96x96.png';
 
 export default function Navbar({ onMenuClick }: NavbarProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);

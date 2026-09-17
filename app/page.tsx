@@ -472,12 +472,12 @@ export default function LandingPage() {
             >
               <button
                 className="btn btn-solid btn-lg"
-                onClick={() => router.push("/signup")}
+                onClick={() => router.push("/login")}
               >
                 Start logging
                 <ArrowRight size={16} />
               </button>
-              <GithubStarButton repo="hassanj-dev/vanguard" />
+              <GithubStarButton repo="hassanj-dev/Vanguard-Finance-Ai" />
             </motion.div>
 
             <motion.dl
@@ -1211,7 +1211,7 @@ html { scroll-behavior: smooth; }
   line-height: 1.6;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.4s ease, color 0.4s ease;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .num { font-family: var(--font-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
@@ -1302,7 +1302,7 @@ a { color: inherit; }
   display: block;
   user-select: none;
 }
-.footer .logo-img { height: 42px; }
+.footer .logo-img { height: 36px; }
 
 .nav-links { display: flex; gap: 28px; }
 .nav-links a { font-size: 14px; font-weight: 500; color: var(--muted); text-decoration: none; transition: color 0.2s; }
