@@ -490,7 +490,6 @@ export default function DashboardPage() {
     const oneOff = total - daily - weekly;
     return { total, completed, percent, daily, weekly, oneOff };
   })();
-
   if (!userId || loading) {
     return (
       <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
@@ -965,17 +964,15 @@ export default function DashboardPage() {
                           Available Balance
                         </p>
                         <p
-                          className={`mt-2 flex items-baseline gap-0.5 leading-none tracking-[-0.03em] ${
-                            availableBalance < 0 ? 'text-[#ffb4ab]' : 'text-white'
-                          }`}
-                        >
-                          <span className="text-lg font-semibold opacity-70">
-                            {availableBalance < 0 ? '-$' : '$'}
-                          </span>
-                          <span className="text-[32px] font-bold">
-                            {Math.abs(availableBalance).toLocaleString()}
-                          </span>
-                        </p>
+  className={`mt-2 leading-none tracking-[-0.03em] ${
+    availableBalance < 0 ? 'text-[#ffb4ab]' : 'text-white'
+  }`}
+>
+  <span className="text-[27px] font-bold tabular-nums">
+    {availableBalance < 0 ? '-$' : '$'}
+    {Math.abs(availableBalance).toFixed(2)}
+  </span>
+</p>
                         {budgetIncome > 0 ? (
                           <div className="mt-1.5 flex items-center gap-2 text-[10px] text-white/60">
                             <span>${budgetIncome.toLocaleString()} income</span>
