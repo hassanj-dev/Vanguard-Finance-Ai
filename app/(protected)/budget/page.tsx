@@ -424,9 +424,6 @@ export default function BudgetPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-semibold text-[var(--text)]">Subscriptions</p>
-                    <span className="rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-2 py-0.5 text-[9px] font-semibold text-[var(--accent-soft)]">
-                      AUTO-SYNCED
-                    </span>
                   </div>
                   <p className="mt-0.5 text-[11px] text-[var(--muted)]">
                     {subscriptionsCount} active service{subscriptionsCount === 1 ? "" : "s"}

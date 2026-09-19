@@ -512,7 +512,7 @@ export default function DashboardPage() {
               <div>
                 <h1 className="text-2xl font-bold text-[var(--text)]">Dashboard</h1>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  Welcome back Hassan<span className="ml-1">👋</span>
+                  Welcome Back Hassan<span className="ml-1">👋</span>
                 </p>
               </div>
               <div className="flex items-center gap-2.5">
