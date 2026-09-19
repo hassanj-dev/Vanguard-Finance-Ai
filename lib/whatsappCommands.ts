@@ -7,8 +7,8 @@ import { supabaseAdmin } from './supabaseAdmin';
 // OWNER_WHATSAPP_NUMBER. If you ever add other people, swap this block for
 // a `profiles` table lookup keyed by `wa_id` instead.
 // ─────────────────────────────────────────────────────────────────────────
-const OWNER_USER_ID = process.env.OWNER_USER_ID!; // the Supabase auth.users id from your dashboard account
-const OWNER_WHATSAPP_NUMBER = process.env.OWNER_WHATSAPP_NUMBER!; // digits only, no '+', e.g. '923001234567'
+const OWNER_USER_ID = (process.env.OWNER_USER_ID ?? '').trim();
+const OWNER_WHATSAPP_NUMBER = (process.env.OWNER_WHATSAPP_NUMBER ?? '').replace(/\D/g, '');
 
 const HELP_TEXT = `Commands:
 • weight 72.5 — log a weight
@@ -22,7 +22,7 @@ const HELP_TEXT = `Commands:
 • status — quick summary`;
 
 export async function handleIncomingMessage(fromNumber: string, rawText: string): Promise<string> {
-  if (fromNumber !== OWNER_WHATSAPP_NUMBER) {
+   if (fromNumber.replace(/\D/g, '') !== OWNER_WHATSAPP_NUMBER) {
     // Not you — don't touch the database, don't reveal anything about it.
     return "This number isn't linked to any account.";
   }

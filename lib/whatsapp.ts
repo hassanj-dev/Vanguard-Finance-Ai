@@ -2,13 +2,17 @@
 //
 // Bump WHATSAPP_API_VERSION when Meta deprecates the current one — check
 // developers.facebook.com/docs/graph-api/changelog for the current version.
-const WHATSAPP_API_VERSION = 'v22.0';
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
-const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
+const WHATSAPP_API_VERSION = 'v26.0';
+const PHONE_NUMBER_ID = (process.env.WHATSAPP_PHONE_NUMBER_ID ?? '').trim();
+const ACCESS_TOKEN = (process.env.WHATSAPP_ACCESS_TOKEN ?? '').trim();
 
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
 async function callWhatsApp(body: Record<string, unknown>): Promise<boolean> {
+    if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
+    console.error('WhatsApp env vars missing: WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN');
+    return false;
+  }
   const res = await fetch(BASE_URL, {
     method: 'POST',
     headers: {

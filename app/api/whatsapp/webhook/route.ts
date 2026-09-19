@@ -64,11 +64,14 @@ export async function POST(request: NextRequest) {
         // location...) show up here too with message.type set accordingly.
         if (message.type !== 'text') continue;
 
-        const from = message.from as string; // sender's WhatsApp number, digits only
+               const from = message.from as string;
         const text = message.text?.body ?? '';
+        console.log('[wa] incoming from:', from, '| expected:', process.env.OWNER_WHATSAPP_NUMBER, '| text:', text);
 
         const reply = await handleIncomingMessage(from, text);
-        await sendWhatsAppText(from, reply);
+        console.log('[wa] reply:', reply);
+        const ok = await sendWhatsAppText(from, reply);
+        console.log('[wa] reply sent:', ok);
       }
     }
   }
