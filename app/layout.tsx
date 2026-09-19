@@ -6,14 +6,14 @@ import "./globals.css";
 /* Only the weights actually used across the app are requested. */
 const figtree = Figtree({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--app-font-sans",
   weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--app-font-mono",
   weight: ["400", "500"],
   display: "swap",
 });

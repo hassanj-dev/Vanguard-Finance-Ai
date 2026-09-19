@@ -24,13 +24,6 @@ interface Todo {
   last_completed_at: string | null;
 }
 
-// FIXED (Critical logic bug): recurring-todo auto-reset previously only
-// lived in the Dashboard page. A user who only ever visited /todo would
-// see completed daily/weekly tasks stay checked off forever, since nothing
-// on this page ever reopened them. The same reset logic from the Dashboard
-// is now ported here (and the Todo interface now includes the
-// `recurrence` / `last_completed_at` fields the DB actually has, which
-// this file was previously missing).
 export default function TodoList() {
   const [userId, setUserId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -39,9 +32,6 @@ export default function TodoList() {
   const [isAdding, setIsAdding] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // -----------------------------
-  // Resolve current user
-  // -----------------------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
@@ -52,9 +42,6 @@ export default function TodoList() {
     });
   }, []);
 
-  // -----------------------------
-  // Reopens completed recurring todos once their cycle (day/week) has passed.
-  // -----------------------------
   const resetDueRecurringTodos = useCallback(async (currentTodos: Todo[]) => {
     const now = Date.now();
     const DAY_MS = 24 * 60 * 60 * 1000;
@@ -80,9 +67,6 @@ export default function TodoList() {
     );
   }, []);
 
-  // -----------------------------
-  // Fetch todos + realtime (this user's rows only)
-  // -----------------------------
   useEffect(() => {
     if (!userId) return;
 
@@ -105,11 +89,13 @@ export default function TodoList() {
 
     fetchTodos();
 
+    const userFilter = `user_id=eq.${userId}`;
+
     const channel = supabase
-      .channel("todos_realtime")
+      .channel(`todos_list_${userId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "todos" },
+        { event: "*", schema: "public", table: "todos", filter: userFilter },
         (payload) => {
           if (payload.eventType === "INSERT") {
             setTodos((prev) => {
@@ -133,9 +119,6 @@ export default function TodoList() {
     };
   }, [userId, resetDueRecurringTodos]);
 
-  // -----------------------------
-  // Add todo (now surfaces errors instead of silently clearing the input)
-  // -----------------------------
   const handleAddTodo = async () => {
     if (!userId || !newTask.trim() || isAdding) return;
 
@@ -156,17 +139,13 @@ export default function TodoList() {
       console.error("Error adding todo:", error.message);
       setErrorMessage("Couldn't add that task. Please try again.");
       setIsAdding(false);
-      return; // keep the text in the input so nothing is lost
+      return;
     }
 
     setNewTask("");
     setIsAdding(false);
   };
 
-  // -----------------------------
-  // Toggle todo (optimistic, with rollback). Stamps last_completed_at so
-  // recurring tasks know when their cycle started.
-  // -----------------------------
   const handleToggleTodo = async (id: number, currentStatus: boolean) => {
     const previous = todos;
     const nowIso = new Date().toISOString();
@@ -192,9 +171,6 @@ export default function TodoList() {
     }
   };
 
-  // -----------------------------
-  // Delete todo (optimistic, with rollback)
-  // -----------------------------
   const handleDeleteTodo = async (id: number) => {
     const previous = todos;
     setTodos((prev) => prev.filter((todo) => todo.id !== id));
@@ -221,6 +197,15 @@ export default function TodoList() {
     if (activeTab === "completed") return todos.filter((todo) => todo.is_completed);
     return todos;
   }, [todos, activeTab]);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+const toggleExpand = (id: number) =>
+  setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
 
   return (
     <div className="min-h-screen bg-[var(--bg)] p-4 sm:p-6 lg:p-8">
@@ -291,7 +276,7 @@ export default function TodoList() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5 shadow-sm sm:p-6">
+          <div className="min-w-0 rounded-3xl border border-[var(--line)] bg-[var(--panel)] p-5 shadow-sm sm:p-6">
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[var(--text)]">Today&apos;s tasks</h2>
@@ -335,7 +320,7 @@ export default function TodoList() {
               <button
                 onClick={handleAddTodo}
                 disabled={isAdding || !newTask.trim()}
-                className="rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="shrink-0 rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isAdding ? "Adding..." : "Add task"}
               </button>
@@ -355,71 +340,80 @@ export default function TodoList() {
                   </p>
                 </div>
               ) : (
-                filteredTodos.map((todo) => (
-                  <div
-                    key={todo.id}
-                    className="group flex items-center gap-3 rounded-2xl border border-transparent bg-[var(--panel-2)] p-3 transition hover:border-[var(--line)] hover:bg-[var(--panel)] hover:shadow-sm"
-                  >
-                    <button
-                      onClick={() => handleToggleTodo(todo.id, todo.is_completed)}
-                      className="shrink-0"
-                      aria-label={todo.is_completed ? "Mark as incomplete" : "Mark as complete"}
-                    >
-                      {todo.is_completed ? (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-white">
-                          <Check size={14} strokeWidth={3} />
-                        </div>
-                      ) : (
-                        <Circle size={24} className="text-[var(--muted)] transition group-hover:text-[var(--accent-soft)]" />
-                      )}
-                    </button>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p
-                          className={`truncate text-sm font-medium transition ${
-                            todo.is_completed ? "text-[var(--muted)] line-through" : "text-[var(--text)]"
-                          }`}
-                        >
-                          {todo.task}
-                        </p>
-                        {todo.recurrence !== "none" && (
-                          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--accent-wash)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--accent-soft)]">
-                            <Repeat className="h-2 w-2" />
-                            {todo.recurrence === "daily" ? "Daily" : "Weekly"}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-[10px] text-[var(--muted)]">
-                        {todo.is_completed ? "Completed" : "Pending task"}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold sm:block ${
-                        todo.is_completed
-                          ? "bg-[color-mix(in_srgb,var(--up)_14%,transparent)] text-[var(--up)]"
-                          : "bg-[var(--accent-wash)] text-[var(--accent-soft)]"
-                      }`}
-                    >
-                      {todo.is_completed ? "Done" : "In progress"}
-                    </span>
-
-                    <button
-                      onClick={() => handleDeleteTodo(todo.id)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] opacity-0 transition hover:bg-[color-mix(in_srgb,var(--over)_12%,transparent)] hover:text-[var(--over)] group-hover:opacity-100"
-                      aria-label="Delete task"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-
-                    <ChevronRight size={15} className="hidden text-[var(--muted)] sm:block" />
-                  </div>
-                ))
-              )}
-            </div>
+                filteredTodos.map((todo) => {
+  const isOpen = expanded.has(todo.id);
+  return (
+    <div
+      key={todo.id}
+      className="group flex min-w-0 items-start gap-3 rounded-2xl border border-transparent bg-[var(--panel-2)] p-3 transition hover:border-[var(--line)] hover:bg-[var(--panel)] hover:shadow-sm"
+    >
+      <button
+        onClick={() => handleToggleTodo(todo.id, todo.is_completed)}
+        className="shrink-0"
+        aria-label={todo.is_completed ? "Mark as incomplete" : "Mark as complete"}
+      >
+        {todo.is_completed ? (
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-white">
+            <Check size={14} strokeWidth={3} />
           </div>
+        ) : (
+          <Circle size={24} className="text-[var(--muted)] transition group-hover:text-[var(--accent-soft)]" />
+        )}
+      </button>
 
+      <button
+        type="button"
+        onClick={() => toggleExpand(todo.id)}
+        aria-expanded={isOpen}
+        className="flex min-w-0 flex-1 items-start gap-2 text-left"
+      >
+        <span
+          className={`block min-w-0 flex-1 text-sm font-medium leading-6 transition ${
+            isOpen ? "whitespace-pre-wrap break-words" : "truncate"
+          } ${todo.is_completed ? "text-[var(--muted)] line-through" : "text-[var(--text)]"}`}
+        >
+          {todo.task}
+        </span>
+        {todo.recurrence !== "none" && (
+          <span className="mt-1 flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--accent-wash)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--accent-soft)]">
+            <Repeat className="h-2 w-2" />
+            {todo.recurrence === "daily" ? "Daily" : "Weekly"}
+          </span>
+        )}
+      </button>
+
+      <span
+        className={`hidden shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold sm:block ${
+          todo.is_completed
+            ? "bg-[color-mix(in_srgb,var(--up)_14%,transparent)] text-[var(--up)]"
+            : "bg-[var(--accent-wash)] text-[var(--accent-soft)]"
+        }`}
+      >
+        {todo.is_completed ? "Done" : "In progress"}
+      </span>
+
+      <button
+        onClick={() => handleDeleteTodo(todo.id)}
+        className="-mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] opacity-0 transition hover:bg-[color-mix(in_srgb,var(--over)_12%,transparent)] hover:text-[var(--over)] group-hover:opacity-100 focus-visible:opacity-100"
+        aria-label="Delete task"
+      >
+        <Trash2 size={15} />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => toggleExpand(todo.id)}
+        className="mt-1 shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
+        aria-label={isOpen ? "Collapse task" : "Expand task"}
+      >
+        <ChevronRight size={15} className={`transition-transform ${isOpen ? "rotate-90" : ""}`} />
+      </button>
+    </div>
+   );
+    })
+  )}
+</div>
+</div>
           <div className="space-y-6">
             <div className="overflow-hidden rounded-3xl bg-[var(--accent)] p-6 text-white shadow-sm">
               <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">

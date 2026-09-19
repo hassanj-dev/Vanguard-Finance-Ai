@@ -1,5 +1,6 @@
 'use client';
-import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -15,6 +16,7 @@ import {
   CheckSquare,
   CreditCard,
   Activity,
+  Wifi,
   Plus,
   ArrowUpRight,
   MoreHorizontal,
@@ -24,6 +26,7 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
+  ChevronDown,
 } from 'lucide-react';
 import AddEntryModal from '../../components/AddEntryModal';
 import LiveClock from '@/app/components/LiveClock';
@@ -63,13 +66,154 @@ interface BudgetRow {
   savings_goal: number;
 }
 
+// Sample card details shown on the Available Balance card
+const CARD_HOLDER = 'Muhammad Hassan Jamshaid';
+const CARD_EXPIRES = '02/30';
+const CARD_LAST4 = '2030';
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TodoRow — long task text can be expanded.
+
+     - measures whether the text is actually overflowing (scrollWidth vs
+       clientWidth, re-measured on resize via ResizeObserver), so the
+       chevron only becomes active when something is hidden;
+     - toggles between `truncate` (one clean line) and
+       `whitespace-pre-wrap break-words` (full text, wrapped);
+     - animates only the text wrapper's height (28px -> auto) with a simple
+       tween. No `layout` prop, so there is no scale/bounce.
+   ═══════════════════════════════════════════════════════════════════════ */
+function TodoRow({
+  todo,
+  onToggle,
+  onDelete,
+}: {
+  todo: Todo;
+  onToggle: (id: number, currentStatus: boolean) => void;
+  onDelete: (id: number) => void;
+}) {
+  // expanded = row is open (drives the height animation)
+  // showFull = text is in wrap mode. True immediately on open, false only
+  //            AFTER the close animation ends so the text doesn't jump.
+  const [expanded, setExpanded] = useState(false);
+  const [showFull, setShowFull] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    // Only measure in collapsed (truncate) mode.
+    if (showFull) return;
+
+    const el = textRef.current;
+    if (!el) return;
+
+    const measure = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [todo.task, showFull]);
+
+  const canExpand = overflowing || expanded;
+
+  const toggleExpand = () => {
+    if (expanded) {
+      setExpanded(false); // showFull turns false when the animation completes
+    } else {
+      setShowFull(true);
+      setExpanded(true);
+    }
+  };
+
+  const shortLabel = todo.task.length > 48 ? `${todo.task.slice(0, 48)}…` : todo.task;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="group flex items-start gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-2.5 hover:border-[var(--line-strong)] hover:bg-[var(--panel)]"
+    >
+      <div className="flex min-w-0 flex-1 items-start gap-1.5">
+        <motion.div
+          initial={false}
+          animate={{ height: expanded ? 'auto' : 28 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          onAnimationComplete={() => {
+            if (!expanded) setShowFull(false);
+          }}
+          className="min-w-0 flex-1 overflow-hidden"
+        >
+          <span
+            ref={textRef}
+            onClick={() => canExpand && toggleExpand()}
+            className={`block py-1.5 pl-1 text-xs leading-4 ${
+              showFull ? 'whitespace-pre-wrap break-words' : 'truncate'
+            } ${canExpand ? 'cursor-pointer' : ''} ${
+              todo.is_completed
+                ? 'text-[var(--muted)] line-through'
+                : 'font-medium text-[var(--text)]'
+            }`}
+          >
+            {todo.task}
+          </span>
+        </motion.div>
+
+        {todo.recurrence !== 'none' && (
+          <span className="mt-1.5 flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--accent-wash)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--accent-soft)]">
+            <Repeat className="h-2 w-2" />
+            {todo.recurrence === 'daily' ? 'Daily' : 'Weekly'}
+          </span>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={toggleExpand}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Hide full task' : 'Show full task'}
+          aria-hidden={!canExpand}
+          tabIndex={canExpand ? 0 : -1}
+          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl text-[var(--muted)] transition hover:bg-[var(--line)] hover:text-[var(--text)] ${
+            canExpand ? '' : 'invisible'
+          }`}
+        >
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        <button
+          onClick={() => onToggle(todo.id, todo.is_completed)}
+          aria-label={
+            todo.is_completed ? `Mark "${shortLabel}" as not done` : `Mark "${shortLabel}" as done`
+          }
+          className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl transition ${
+            todo.is_completed
+              ? 'bg-[var(--up)] text-white'
+              : 'border border-[var(--line-strong)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--up)] hover:text-[var(--up)]'
+          }`}
+        >
+          <Check className="h-3 w-3" />
+        </button>
+
+        <button
+          onClick={() => onDelete(todo.id)}
+          aria-label={`Delete "${shortLabel}"`}
+          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] text-[var(--muted)] transition hover:border-[var(--over)] hover:bg-[color-mix(in_srgb,var(--over)_14%,transparent)] hover:text-[var(--over)]"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 // NOTE ON AUTH: this page no longer runs its own getSession()/onAuthStateChange
 // check. app/(dashboard)/layout.tsx (ProtectedLayout) already gates every route
 // in this group behind an auth check and doesn't render children until it
-// resolves — doing it again here meant two Supabase auth calls and two
-// listeners per page load for no benefit. If this page can ever be reached
-// outside ProtectedLayout, put the check back at the layout level instead of
-// here.
+// resolves.
 
 export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -141,8 +285,6 @@ export default function DashboardPage() {
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
-        // One row per user (unique constraint on user_id) — no more
-        // order/limit(1) guessing at "whichever budget was saved last".
         supabase.from('budgets').select('*').eq('user_id', userId).maybeSingle(),
       ]);
 
@@ -172,53 +314,70 @@ export default function DashboardPage() {
     if (!userId) return;
     fetchInitialData();
 
-    // Targeted realtime handlers instead of one fetchInitialData() call
-    // wired to all four tables: toggling a single todo used to re-fetch
-    // weight logs, subscriptions, AND the budget row too. Each table now
-    // only updates its own piece of state. RLS (see migration) means each
-    // channel only ever receives this user's own rows.
+    // Targeted realtime handlers instead of one fetchInitialData() call wired
+    // to all four tables. Each channel is also explicitly filtered to this
+    // user's rows — RLS already enforces it server-side, but the filter means
+    // the socket doesn't even carry rows we'd throw away.
+    const userFilter = `user_id=eq.${userId}`;
+
     const channel = supabase
-      .channel('db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'weight_logs' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setWeights((prev) => [...prev, payload.new as WeightLog]);
-        } else if (payload.eventType === 'DELETE') {
-          setWeights((prev) => prev.filter((w) => w.id !== payload.old.id));
-        } else if (payload.eventType === 'UPDATE') {
-          const updated = payload.new as WeightLog;
-          setWeights((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+      .channel(`db-changes-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'weight_logs', filter: userFilter },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setWeights((prev) => [...prev, payload.new as WeightLog]);
+          } else if (payload.eventType === 'DELETE') {
+            setWeights((prev) => prev.filter((w) => w.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as WeightLog;
+            setWeights((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+          }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setTodos((prev) => {
-            if (prev.some((t) => t.id === (payload.new as Todo).id)) return prev;
-            return [payload.new as Todo, ...prev];
-          });
-        } else if (payload.eventType === 'DELETE') {
-          setTodos((prev) => prev.filter((t) => t.id !== payload.old.id));
-        } else if (payload.eventType === 'UPDATE') {
-          const updated = payload.new as Todo;
-          setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'todos', filter: userFilter },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setTodos((prev) => {
+              if (prev.some((t) => t.id === (payload.new as Todo).id)) return prev;
+              return [payload.new as Todo, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setTodos((prev) => prev.filter((t) => t.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as Todo;
+            setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setSubscriptions((prev) => {
-            if (prev.some((s) => s.id === (payload.new as Subscription).id)) return prev;
-            return [payload.new as Subscription, ...prev];
-          });
-        } else if (payload.eventType === 'DELETE') {
-          setSubscriptions((prev) => prev.filter((s) => s.id !== payload.old.id));
-        } else if (payload.eventType === 'UPDATE') {
-          const updated = payload.new as Subscription;
-          setSubscriptions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'subscriptions', filter: userFilter },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setSubscriptions((prev) => {
+              if (prev.some((s) => s.id === (payload.new as Subscription).id)) return prev;
+              return [payload.new as Subscription, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setSubscriptions((prev) => prev.filter((s) => s.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as Subscription;
+            setSubscriptions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+          }
         }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, (payload) => {
-        if (payload.eventType === 'DELETE') setBudgetRow(null);
-        else setBudgetRow(payload.new as BudgetRow);
-      })
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'budgets', filter: userFilter },
+        (payload) => {
+          if (payload.eventType === 'DELETE') setBudgetRow(null);
+          else setBudgetRow(payload.new as BudgetRow);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -226,43 +385,59 @@ export default function DashboardPage() {
     };
   }, [userId, fetchInitialData]);
 
-  const toggleTodoStatus = async (id: number, currentStatus: boolean) => {
-    const previousTodos = [...todos];
-    const nowIso = new Date().toISOString();
-    const markingComplete = !currentStatus;
+  const toggleTodoStatus = useCallback(
+    async (id: number, currentStatus: boolean) => {
+      const previousTodos = todos;
+      const nowIso = new Date().toISOString();
+      const markingComplete = !currentStatus;
 
-    setTodos((prev) =>
-      prev.map((todo) =>
-        todo.id === id
-          ? { ...todo, is_completed: markingComplete, last_completed_at: markingComplete ? nowIso : todo.last_completed_at }
-          : todo
-      )
-    );
+      setTodos((prev) =>
+        prev.map((todo) =>
+          todo.id === id
+            ? {
+                ...todo,
+                is_completed: markingComplete,
+                last_completed_at: markingComplete ? nowIso : todo.last_completed_at,
+              }
+            : todo
+        )
+      );
 
-    const { error } = await supabase
-      .from('todos')
-      .update({ is_completed: markingComplete, ...(markingComplete ? { last_completed_at: nowIso } : {}) })
-      .eq('id', id);
+      const { error } = await supabase
+        .from('todos')
+        .update({
+          is_completed: markingComplete,
+          ...(markingComplete ? { last_completed_at: nowIso } : {}),
+        })
+        .eq('id', id);
 
-    if (error) {
-      console.error('Error toggling todo status:', error.message);
-      setTodos(previousTodos);
-    }
-  };
+      if (error) {
+        console.error('Error toggling todo status:', error.message);
+        setTodos(previousTodos);
+      }
+    },
+    [todos]
+  );
 
-  const deleteTodo = async (id: number) => {
-    const previousTodos = [...todos];
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
+  const deleteTodo = useCallback(
+    async (id: number) => {
+      const previousTodos = todos;
+      setTodos((prev) => prev.filter((todo) => todo.id !== id));
 
-    const { error } = await supabase.from('todos').delete().eq('id', id);
+      const { error } = await supabase.from('todos').delete().eq('id', id);
 
-    if (error) {
-      console.error('Error deleting todo:', error.message);
-      setTodos(previousTodos);
-    }
-  };
+      if (error) {
+        console.error('Error deleting todo:', error.message);
+        setTodos(previousTodos);
+      }
+    },
+    [todos]
+  );
 
-  const totalBalance = subscriptions.reduce((sum: number, sub: Subscription) => sum + Number(sub.cost || 0), 0);
+  const totalBalance = subscriptions.reduce(
+    (sum: number, sub: Subscription) => sum + Number(sub.cost || 0),
+    0
+  );
 
   const budgetIncome = Number(budgetRow?.income) || 0;
   const manualExpensesTotal = budgetRow
@@ -291,6 +466,20 @@ export default function DashboardPage() {
     const change = weights.length > 1 ? round1(weights[weights.length - 1].weight - weights[0].weight) : 0;
     return { highest, lowest, change };
   })();
+
+  const latestWeight = weights.length > 0 ? weights[weights.length - 1].weight : null;
+  const prevWeight = weights.length > 1 ? weights[weights.length - 2].weight : null;
+  const lastDelta =
+    latestWeight !== null && prevWeight !== null
+      ? Math.round((latestWeight - prevWeight) * 10) / 10
+      : null;
+  const lastLoggedLabel =
+    weights.length > 0
+      ? new Date(weights[weights.length - 1].created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        })
+      : null;
 
   const taskStats = (() => {
     const total = todos.length;
@@ -345,15 +534,8 @@ export default function DashboardPage() {
               </div>
             </motion.div>
 
-            {/*
-              FIXED (Responsiveness): this grid previously jumped straight
-              from a single stacked column to a 3-column layout only at
-              `xl:` (1280px+), so the common 1024–1280px laptop range fell
-              back to one column and wasted horizontal space. Added an
-              `lg:` 2-column step in between; the `xl:` 3-column layout is
-              unchanged.
-            */}
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-[1.35fr_0.85fr_0.85fr]">
+              {/* ───────────── Weight Tracker ───────────── */}
               <motion.section
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -369,51 +551,87 @@ export default function DashboardPage() {
                       Weight Tracker
                     </h2>
                   </div>
-                  <button aria-label="More weight tracker options" className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] transition hover:bg-[var(--line)] hover:text-[var(--text)]">
+                  <button
+                    aria-label="More weight tracker options"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] transition hover:bg-[var(--line)] hover:text-[var(--text)]"
+                  >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 </div>
 
-                <div className="relative mb-5 min-h-[178px] overflow-hidden rounded-[24px] bg-[var(--accent-wash)] p-5">
-                  <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-                  <div className="absolute -bottom-16 left-12 h-40 w-40 rounded-full bg-[var(--accent-soft)]/20 blur-2xl" />
-                  <div className="absolute -right-3 bottom-[-55px] h-44 w-44 rounded-full border-[22px] border-white/10" />
-                  <div className="absolute right-16 bottom-[-38px] h-28 w-28 rounded-full border-[14px] border-[var(--accent-soft)]/20" />
-
-                  <div className="relative z-10 flex h-full flex-col justify-between">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-[11px] font-medium text-[var(--muted)]">Current weight</p>
-                        <p className="mt-1 text-[28px] font-bold tracking-[-0.05em] text-[var(--text)]">
-                          {weights.length > 0 ? `${weights[weights.length - 1].weight}` : '0'}
-                          <span className="ml-1 text-sm font-semibold tracking-normal text-[var(--muted)]">kg</span>
-                        </p>
-                      </div>
-                      <span className="rounded-full border border-[var(--line-strong)] bg-[var(--panel)]/60 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--text)] backdrop-blur-md">
-                        Live Overview
+                {/* Hero stats: current weight — no chart here, avoids duplicating the graph below */}
+                <div
+                  className="relative mb-5 overflow-hidden rounded-[24px] border border-[var(--line)] p-6"
+                  style={{
+                    background:
+                      'radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 62%), var(--panel-2)',
+                  }}
+                >
+                  <div className="relative z-10 flex items-center justify-between">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                      Current Weight
+                    </p>
+                    <span className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--muted)]">
+                      <span className="relative flex h-1.5 w-1.5 items-center justify-center">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--up)] opacity-50" />
+                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--up)]" />
                       </span>
-                    </div>
-                    <div className="flex items-end justify-between">
-                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--muted)]">
-                        <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
-                        Weight analytics
-                      </div>
-                    </div>
+                      Live
+                    </span>
+                  </div>
+
+                  <p className="relative z-10 mt-3.5 flex items-baseline gap-1.5 leading-[0.9] tracking-[-0.04em] text-[var(--text)]">
+                    <span className="text-[32px] font-bold">{latestWeight ?? '—'}</span>
+                    <span className="text-base font-semibold text-[var(--muted)]">kg</span>
+                  </p>
+
+                  <div className="relative z-10 mt-2.5 flex items-center gap-2">
+                    {lastDelta === null ? (
+                      <span className="text-[10px] font-medium text-[var(--muted)]">
+                        {weights.length === 0 ? 'No entries yet' : 'First entry'}
+                      </span>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                          lastDelta === 0
+                            ? 'text-[var(--muted)]'
+                            : lastDelta > 0
+                            ? 'text-[var(--over)]'
+                            : 'text-[var(--up)]'
+                        }`}
+                      >
+                        {lastDelta > 0 ? (
+                          <TrendingUp className="h-3 w-3" />
+                        ) : lastDelta < 0 ? (
+                          <TrendingDown className="h-3 w-3" />
+                        ) : (
+                          <Minus className="h-3 w-3" />
+                        )}
+                        {lastDelta > 0 ? '+' : ''}
+                        {lastDelta} kg
+                      </span>
+                    )}
+                    {lastLoggedLabel && (
+                      <span className="text-[10px] text-[var(--muted)]">Since {lastLoggedLabel}</span>
+                    )}
                   </div>
                 </div>
 
                 <div className="mb-5">
                   <div className="mb-3 flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-semibold text-[var(--text)]">Progress</h3>
-                      <p className="mt-0.5 text-[10px] text-[var(--muted)]">Your recorded weight over time</p>
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+                        Weight Progress
+                      </h3>
+                      <p className="mt-0.5 text-[10px] text-[var(--muted)]">Recorded over time</p>
                     </div>
-                    <span className="rounded-full bg-[var(--panel-2)] px-2.5 py-1 text-[9px] font-medium text-[var(--muted)]">
+                    <button className="flex cursor-pointer items-center gap-1 rounded-full bg-[var(--panel-2)] px-2.5 py-1 text-[9px] font-medium text-[var(--muted)] transition hover:text-[var(--text)]">
                       All time
-                    </span>
+                      <ChevronDown className="h-2.5 w-2.5" />
+                    </button>
                   </div>
 
-                  <div className="h-[190px] w-full min-w-0">
+                  <div className="h-[230px] w-full min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
                         <defs>
@@ -422,25 +640,34 @@ export default function DashboardPage() {
                             <stop offset="95%" stopColor="var(--accent-soft)" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 9, fill: 'var(--muted)' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
                         <YAxis hide domain={['dataMin - 2', 'dataMax + 2']} />
                         <Tooltip
                           contentStyle={{
-                            borderRadius: '14px',
+                            borderRadius: '12px',
                             border: '1px solid var(--line)',
-                            background: 'var(--panel)',
+                            background: 'color-mix(in srgb, var(--panel) 90%, transparent)',
+                            backdropFilter: 'blur(6px)',
                             boxShadow: 'var(--shadow)',
                             fontSize: '11px',
                             color: 'var(--text)',
+                            padding: '8px 12px',
                           }}
+                          labelStyle={{ fontSize: '10px', color: 'var(--muted)', marginBottom: 2 }}
+                          itemStyle={{ padding: 0 }}
                         />
                         <Area
                           type="monotone"
                           dataKey="weight"
                           stroke="var(--accent)"
-                          strokeWidth={2.5}
+                          strokeWidth={2}
                           fill="url(#colorWeight)"
-                          activeDot={{ r: 5, strokeWidth: 3, stroke: 'var(--panel)' }}
+                          activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--panel)' }}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -456,23 +683,26 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {[...weights].reverse().slice(0, 2).map((w) => (
-                      <div
-                        key={w.id}
-                        className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3 transition hover:border-[var(--line-strong)] hover:bg-[var(--panel)]"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--panel)] shadow-sm">
-                            <Scale className="h-3.5 w-3.5 text-[var(--accent-soft)]" />
+                    {[...weights]
+                      .reverse()
+                      .slice(0, 2)
+                      .map((w) => (
+                        <div
+                          key={w.id}
+                          className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3 transition hover:border-[var(--line-strong)] hover:bg-[var(--panel)]"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--panel)] shadow-sm">
+                              <Scale className="h-3.5 w-3.5 text-[var(--accent-soft)]" />
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold text-[var(--text)]">Weight Log</p>
+                              <p className="text-[9px] text-[var(--muted)]">Recorded</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-[11px] font-semibold text-[var(--text)]">Weight Log</p>
-                            <p className="text-[9px] text-[var(--muted)]">Recorded</p>
-                          </div>
+                          <span className="text-xs font-bold text-[var(--text)]">{w.weight} kg</span>
                         </div>
-                        <span className="text-xs font-bold text-[var(--text)]">{w.weight} kg</span>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
 
@@ -483,7 +713,9 @@ export default function DashboardPage() {
 
                   {weights.length === 0 ? (
                     <div className="flex min-h-[80px] items-center justify-center rounded-2xl bg-[var(--panel-2)] text-center">
-                      <p className="text-[10px] text-[var(--muted)]">Log a few weights to see insights here.</p>
+                      <p className="text-[10px] text-[var(--muted)]">
+                        Log a few weights to see insights here.
+                      </p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
@@ -492,7 +724,9 @@ export default function DashboardPage() {
                           <TrendingUp className="h-3.5 w-3.5 text-[var(--over)]" />
                         </div>
                         <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">Highest</p>
-                        <p className="mt-0.5 text-sm font-bold text-[var(--text)]">{weightStats.highest} kg</p>
+                        <p className="mt-0.5 text-sm font-bold text-[var(--text)]">
+                          {weightStats.highest} kg
+                        </p>
                       </div>
 
                       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
@@ -500,7 +734,9 @@ export default function DashboardPage() {
                           <TrendingDown className="h-3.5 w-3.5 text-[var(--up)]" />
                         </div>
                         <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">Lowest</p>
-                        <p className="mt-0.5 text-sm font-bold text-[var(--text)]">{weightStats.lowest} kg</p>
+                        <p className="mt-0.5 text-sm font-bold text-[var(--text)]">
+                          {weightStats.lowest} kg
+                        </p>
                       </div>
 
                       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3">
@@ -513,7 +749,9 @@ export default function DashboardPage() {
                             <TrendingDown className="h-3.5 w-3.5 text-[var(--up)]" />
                           )}
                         </div>
-                        <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">Net Change</p>
+                        <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                          Net Change
+                        </p>
                         <p
                           className={`mt-0.5 text-sm font-bold ${
                             weightStats.change === null || weightStats.change === 0
@@ -532,6 +770,7 @@ export default function DashboardPage() {
                 </div>
               </motion.section>
 
+              {/* ───────────── Middle column: Budget + Tasks ───────────── */}
               <div className="flex min-w-0 flex-col gap-5">
                 <motion.section
                   initial={{ opacity: 0, y: 15 }}
@@ -541,34 +780,43 @@ export default function DashboardPage() {
                 >
                   <div className="mb-5 flex items-start justify-between">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Overview</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                        Overview
+                      </p>
                       <h3 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[var(--text)]">
                         Monthly Budget
                       </h3>
                     </div>
-                    <button aria-label="View budget details" className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--panel-2)] text-[var(--muted)] transition hover:bg-[var(--line)] hover:text-[var(--text)]">
+                    <Link
+                      href="/budget"
+                      aria-label="Open budget page"
+                      title="Open budget page"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--panel-2)] text-[var(--muted)] transition hover:bg-[var(--line)] hover:text-[var(--text)]"
+                    >
                       <ArrowUpRight className="h-3.5 w-3.5" />
-                    </button>
+                    </Link>
                   </div>
 
                   <div className="mb-3 flex items-end justify-between">
                     <div>
-                      <p className="mb-1 text-[9px] uppercase tracking-wider text-[var(--muted)]">Total</p>
+                      <p className="mb-1 text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                        Total spent
+                      </p>
                       <p className="text-[26px] font-bold tracking-[-0.05em] text-[var(--text)]">
-                        ${totalBalance.toLocaleString()}
+                        ${totalMonthlyExpenses.toLocaleString()}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">Active</p>
-                      <p className="mt-1 text-sm font-semibold text-[var(--text)]">{subscriptions.length}</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                        {subscriptions.length}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="mb-2 flex items-center justify-between text-[9px]">
-                    <span className="text-[var(--muted)]">Budget usage</span>
-                    <span className="font-semibold text-[var(--text)]">
-                      {budgetIncome > 0 ? `${budgetUsagePercent}%` : '—'}
-                    </span>
+                  <div className="mb-3 flex items-center justify-between text-[9px] text-[var(--muted)]">
+                    <span>Subscriptions ${totalBalance.toLocaleString()}</span>
+                    <span>Budget page ${manualExpensesTotal.toLocaleString()}</span>
                   </div>
 
                   <div className="h-2 overflow-hidden rounded-full bg-[var(--panel-2)]">
@@ -625,53 +873,12 @@ export default function DashboardPage() {
                         </div>
                       ) : (
                         todos.map((todo) => (
-                          <motion.div
+                          <TodoRow
                             key={todo.id}
-                            layout
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="group flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--panel-2)] p-3 transition hover:border-[var(--line-strong)] hover:bg-[var(--panel)]"
-                          >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`block truncate text-[11px] ${
-                                    todo.is_completed ? 'text-[var(--muted)] line-through' : 'font-medium text-[var(--text)]'
-                                  }`}
-                                >
-                                  {todo.task}
-                                </span>
-                                {todo.recurrence !== 'none' && (
-                                  <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--accent-wash)] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[var(--accent-soft)]">
-                                    <Repeat className="h-2 w-2" />
-                                    {todo.recurrence === 'daily' ? 'Daily' : 'Weekly'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex shrink-0 items-center gap-1">
-                              <button
-                                onClick={() => toggleTodoStatus(todo.id, todo.is_completed)}
-                                aria-label={todo.is_completed ? `Mark "${todo.task}" as not done` : `Mark "${todo.task}" as done`}
-                                className={`flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl transition ${
-                                  todo.is_completed
-                                    ? 'bg-[var(--up)] text-white'
-                                    : 'border border-[var(--line-strong)] bg-[var(--panel)] text-[var(--muted)] hover:border-[var(--up)] hover:text-[var(--up)]'
-                                }`}
-                              >
-                                <Check className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => deleteTodo(todo.id)}
-                                aria-label={`Delete "${todo.task}"`}
-                                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl border border-[var(--line-strong)] bg-[var(--panel)] text-[var(--muted)] transition hover:border-[var(--over)] hover:bg-[color-mix(in_srgb,var(--over)_14%,transparent)] hover:text-[var(--over)]"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </motion.div>
+                            todo={todo}
+                            onToggle={toggleTodoStatus}
+                            onDelete={deleteTodo}
+                          />
                         ))
                       )}
                     </AnimatePresence>
@@ -680,7 +887,9 @@ export default function DashboardPage() {
                   {todos.length > 0 && (
                     <div className="mt-4 border-t border-[var(--line)] pt-4">
                       <div className="mb-2 flex items-center justify-between text-[9px]">
-                        <span className="font-semibold uppercase tracking-wider text-[var(--muted)]">Completion</span>
+                        <span className="font-semibold uppercase tracking-wider text-[var(--muted)]">
+                          Completion
+                        </span>
                         <span className="font-semibold text-[var(--text)]">
                           {taskStats.completed}/{taskStats.total} ({taskStats.percent}%)
                         </span>
@@ -717,55 +926,97 @@ export default function DashboardPage() {
                 </motion.section>
               </div>
 
+              {/* ───────────── Right column: Balance card + Subscriptions ───────────── */}
               <div className="flex min-w-0 flex-col gap-5">
                 <motion.section
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12 }}
-                  className="relative min-h-[210px] overflow-hidden rounded-[26px] border border-[var(--line-strong)] bg-[var(--accent-wash)] p-6 shadow-[var(--shadow)]"
+                  className="group relative min-h-[214px] overflow-hidden rounded-[26px] p-6 text-white shadow-[0_24px_50px_-18px_rgba(82,39,255,0.65)] ring-1 ring-white/15 transition-transform duration-300 hover:-translate-y-0.5"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, #6a45ff 0%, #4a1fe8 36%, #2a0f8f 70%, #160a4d 100%)',
+                  }}
                 >
-                  <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-                  <div className="absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-[var(--accent-soft)]/20 blur-2xl" />
-                  <div className="absolute right-[-25px] top-[50px] h-28 w-28 rounded-full border-[16px] border-white/10" />
+                  {/* Softly glowing corners — subtle, not decorative */}
+                  <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-[64px]" />
+                  <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-cyan-300/10 blur-[64px]" />
 
-                  <div className="relative z-10 flex h-full min-h-[158px] flex-col justify-between">
+                  {/* Thin concentric lines — max 2, low opacity */}
+                  <svg
+                    className="pointer-events-none absolute -bottom-20 -right-12 h-72 w-72 text-white/[0.08]"
+                    viewBox="0 0 200 200"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                  >
+                    <circle cx="100" cy="100" r="55" />
+                    <circle cx="100" cy="100" r="85" />
+                  </svg>
+
+                  {/* Shine sweep on hover */}
+                  <div className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-1000 ease-out group-hover:translate-x-full" />
+
+                  <div className="relative z-10 flex h-full min-h-[166px] flex-col justify-between">
+                    {/* Top: balance + VISA */}
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">
+                        <p className="text-[9px] font-medium uppercase tracking-[0.2em] text-white/60">
                           Available Balance
                         </p>
                         <p
-                          className={`mt-2 text-2xl font-bold tracking-[-0.04em] ${
-                            availableBalance < 0 ? 'text-[var(--over)]' : 'text-[var(--text)]'
+                          className={`mt-2 flex items-baseline gap-0.5 leading-none tracking-[-0.03em] ${
+                            availableBalance < 0 ? 'text-[#ffb4ab]' : 'text-white'
                           }`}
                         >
-                          {availableBalance < 0 ? '-' : ''}${Math.abs(availableBalance).toLocaleString()}
+                          <span className="text-lg font-semibold opacity-70">
+                            {availableBalance < 0 ? '-$' : '$'}
+                          </span>
+                          <span className="text-[32px] font-bold">
+                            {Math.abs(availableBalance).toLocaleString()}
+                          </span>
                         </p>
-                        {budgetIncome === 0 && (
-                          <p className="mt-1 text-[8px] text-[var(--muted)]">Set income on Budget page</p>
+                        {budgetIncome > 0 ? (
+                          <div className="mt-1.5 flex items-center gap-2 text-[10px] text-white/60">
+                            <span>${budgetIncome.toLocaleString()} income</span>
+                            <span className="h-0.5 w-0.5 rounded-full bg-white/30" />
+                            <span>{budgetUsagePercent}% used</span>
+                          </div>
+                        ) : (
+                          <p className="mt-1.5 text-[10px] text-white/60">Set income on Budget page</p>
                         )}
                       </div>
-                      <span className="text-xl font-black italic tracking-[0.08em] text-[var(--text)]/45">VISA</span>
+                      <span className="text-[14px] font-bold italic tracking-[0.08em] text-white/60">
+                        VISA
+                      </span>
                     </div>
 
-                    <div>
-                      <div className="mb-5 flex gap-1.5">
-                        <span className="h-1 w-1 rounded-full bg-[var(--text)]/60" />
-                        <span className="h-1 w-1 rounded-full bg-[var(--text)]/60" />
-                        <span className="h-1 w-1 rounded-full bg-[var(--text)]/60" />
-                        <span className="h-1 w-1 rounded-full bg-[var(--text)]/60" />
-                        <span className="ml-1 text-[10px] font-medium tracking-[0.2em] text-[var(--text)]/70">
-                          •••• (sample)
-                        </span>
+                    {/* Middle: chip + contactless */}
+                    <div className="my-3 flex items-center gap-4">
+                      <div className="relative h-6 w-8 overflow-hidden rounded-[6px] bg-gradient-to-br from-amber-100/90 via-amber-200/90 to-amber-400/80 shadow-inner">
+                        <span className="absolute inset-x-0 top-1/3 h-px bg-black/20" />
+                        <span className="absolute inset-x-0 top-2/3 h-px bg-black/20" />
+                        <span className="absolute inset-y-0 left-1/3 w-px bg-black/20" />
+                        <span className="absolute inset-y-0 left-2/3 w-px bg-black/20" />
                       </div>
+                      <Wifi className="h-4 w-4 rotate-90 text-white/45" />
+                    </div>
+
+                    {/* Bottom: number + holder + expiry */}
+                    <div>
+                      <p className="mb-3 font-mono text-[12px] tracking-[0.18em] text-white/70">
+                        •••• •••• •••• {CARD_LAST4}
+                      </p>
                       <div className="flex items-end justify-between">
-                        <div>
-                          <p className="text-[8px] uppercase tracking-wider text-[var(--muted)]">Card holder</p>
-                          <p className="mt-1 text-[10px] font-semibold text-[var(--text)]/80">Sample display only</p>
+                        <div className="min-w-0">
+                          <p className="text-[9px] uppercase tracking-wider text-white/50">Card holder</p>
+                          <p className="mt-0.5 truncate text-[12px] font-semibold text-white/95">
+                            {CARD_HOLDER}
+                          </p>
                         </div>
-                        <div>
-                          <p className="text-[8px] uppercase tracking-wider text-[var(--muted)]">Expires</p>
-                          <p className="mt-1 text-[10px] font-semibold text-[var(--text)]/80">—</p>
+                        <div className="shrink-0 pl-4 text-right">
+                          <p className="text-[9px] uppercase tracking-wider text-white/50">Expires</p>
+                          <p className="mt-0.5 text-[12px] font-semibold text-white/95">{CARD_EXPIRES}</p>
                         </div>
                       </div>
                     </div>
@@ -800,7 +1051,9 @@ export default function DashboardPage() {
                   <div className="mb-4 rounded-2xl bg-[var(--panel-2)] p-3.5">
                     <div className="flex items-end justify-between">
                       <div>
-                        <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">Monthly total</p>
+                        <p className="text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                          Monthly total
+                        </p>
                         <p className="mt-1 text-xl font-bold tracking-[-0.04em] text-[var(--text)]">
                           ${totalBalance.toLocaleString()}
                         </p>
@@ -818,7 +1071,9 @@ export default function DashboardPage() {
                           <CreditCard className="h-5 w-5 text-[var(--muted)]" />
                         </div>
                         <p className="text-xs font-medium text-[var(--muted)]">No subscriptions</p>
-                        <p className="mt-1 text-[9px] text-[var(--muted)]">Your recurring expenses will appear here.</p>
+                        <p className="mt-1 text-[9px] text-[var(--muted)]">
+                          Your recurring expenses will appear here.
+                        </p>
                       </div>
                     ) : (
                       subscriptions.map((sub) => (
@@ -829,7 +1084,9 @@ export default function DashboardPage() {
                           <div className="flex min-w-0 items-center gap-2.5">
                             <SubscriptionIcon name={sub.name} sizeClassName="h-8 w-8" />
                             <div className="min-w-0">
-                              <p className="truncate text-[11px] font-semibold capitalize text-[var(--text)]">{sub.name}</p>
+                              <p className="truncate text-[11px] font-semibold capitalize text-[var(--text)]">
+                                {sub.name}
+                              </p>
                               <p className="mt-0.5 text-[8px] text-[var(--muted)]">Debit Card</p>
                             </div>
                           </div>
@@ -864,15 +1121,17 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold text-[var(--text)]">Everything is up to date</p>
-                  <p className="text-[8px] text-[var(--muted)]">Dashboard is synced with your latest data</p>
+                  <p className="text-[8px] text-[var(--muted)]">
+                    Dashboard is synced with your latest data
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-[9px] text-[var(--muted)]">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] text-[var(--muted)]">
                 <span>{weights.length} weight logs</span>
-                <span className="h-1 w-1 rounded-full bg-[var(--line-strong)]" />
+                <span className="hidden h-1 w-1 rounded-full bg-[var(--line-strong)] sm:inline-block" />
                 <span>{todos.length} tasks</span>
-                <span className="h-1 w-1 rounded-full bg-[var(--line-strong)]" />
+                <span className="hidden h-1 w-1 rounded-full bg-[var(--line-strong)] sm:inline-block" />
                 <span>{subscriptions.length} subscriptions</span>
               </div>
             </motion.div>
