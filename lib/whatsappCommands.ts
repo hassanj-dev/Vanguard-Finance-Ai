@@ -6,6 +6,11 @@ import { supabaseAdmin } from './supabaseAdmin';
 // OWNER_USER_ID from env, and we only act on messages that come from
 // OWNER_WHATSAPP_NUMBER. If you ever add other people, swap this block for
 // a `profiles` table lookup keyed by `wa_id` instead.
+//
+// .trim() / .replace(/\D/g, '') here guard against copy-paste noise in the
+// env vars (trailing spaces, stray '+' or dashes in the phone number) —
+// without this, a perfectly correct-looking value can silently fail to
+// match and every message gets the "not linked" reply.
 // ─────────────────────────────────────────────────────────────────────────
 const OWNER_USER_ID = (process.env.OWNER_USER_ID ?? '').trim();
 const OWNER_WHATSAPP_NUMBER = (process.env.OWNER_WHATSAPP_NUMBER ?? '').replace(/\D/g, '');
@@ -17,12 +22,14 @@ const HELP_TEXT = `Commands:
 • task weekly clean car — add a weekly task
 • done buy milk — mark a task complete
 • sub netflix 15 — add/update a subscription
+• sub netflix 15 2026-10-05 — same, plus set its renewal date (get a WhatsApp alert 3 days before)
+• renew netflix 2026-11-05 — update just the renewal date
 • income 20000 — set monthly income
 • budget housing 500 — set a budget category (housing/food/transport/utilities/other)
 • status — quick summary`;
 
 export async function handleIncomingMessage(fromNumber: string, rawText: string): Promise<string> {
-   if (fromNumber.replace(/\D/g, '') !== OWNER_WHATSAPP_NUMBER) {
+  if (fromNumber.replace(/\D/g, '') !== OWNER_WHATSAPP_NUMBER) {
     // Not you — don't touch the database, don't reveal anything about it.
     return "This number isn't linked to any account.";
   }
@@ -86,11 +93,36 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
       return `Marked "${matches[0].task}" done ✅`;
     }
 
-    // ── sub netflix 15  (insert, or update the cost if it exists) ──
-    m = text.match(/^sub(?:scription)?\s+(.+?)\s+(\d+(\.\d+)?)$/i);
+    // ── renew netflix 2026-11-05 — update just the renewal date ────
+    m = text.match(/^renew\s+(.+?)\s+(\d{4}-\d{2}-\d{2})$/i);
+    if (m) {
+      const name = m[1].trim();
+      const nextRenewalDate = m[2];
+      const { data: existing, error: findError } = await supabaseAdmin
+        .from('subscriptions')
+        .select('id')
+        .eq('user_id', OWNER_USER_ID)
+        .ilike('name', name)
+        .limit(1);
+      if (findError) throw findError;
+      if (!existing || existing.length === 0) {
+        return `No subscription named "${name}" found. Add it first: sub ${name} <cost>`;
+      }
+      const { error } = await supabaseAdmin
+        .from('subscriptions')
+        .update({ next_renewal_date: nextRenewalDate })
+        .eq('id', existing[0].id);
+      if (error) throw error;
+      return `${name} renewal date set to ${nextRenewalDate} ✅`;
+    }
+
+    // ── sub netflix 15  [YYYY-MM-DD]  (insert, or update if it exists) ──
+    m = text.match(/^sub(?:scription)?\s+(.+?)\s+(\d+(\.\d+)?)(?:\s+(\d{4}-\d{2}-\d{2}))?$/i);
     if (m) {
       const name = m[1].trim();
       const cost = parseFloat(m[2]);
+      const nextRenewalDate = m[4] ?? null;
+
       const { data: existing, error: findError } = await supabaseAdmin
         .from('subscriptions')
         .select('id')
@@ -99,19 +131,26 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
         .limit(1);
       if (findError) throw findError;
 
+      const dateNote = nextRenewalDate ? `, renews ${nextRenewalDate}` : '';
+
       if (existing && existing.length > 0) {
+        const updatePayload: Record<string, unknown> = { cost };
+        if (nextRenewalDate) updatePayload.next_renewal_date = nextRenewalDate;
         const { error } = await supabaseAdmin
           .from('subscriptions')
-          .update({ cost })
+          .update(updatePayload)
           .eq('id', existing[0].id);
         if (error) throw error;
-        return `Updated ${name}: $${cost}/mo ✅`;
+        return `Updated ${name}: $${cost}/mo${dateNote} ✅`;
       }
-      const { error } = await supabaseAdmin
-        .from('subscriptions')
-        .insert({ user_id: OWNER_USER_ID, name, cost });
+      const { error } = await supabaseAdmin.from('subscriptions').insert({
+        user_id: OWNER_USER_ID,
+        name,
+        cost,
+        next_renewal_date: nextRenewalDate,
+      });
       if (error) throw error;
-      return `Added subscription: ${name} — $${cost}/mo ✅`;
+      return `Added subscription: ${name} — $${cost}/mo${dateNote} ✅`;
     }
 
     // ── income 20000 ─────────────────────────────────────────────────

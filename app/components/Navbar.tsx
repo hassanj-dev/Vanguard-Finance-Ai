@@ -72,53 +72,81 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   }, []);
 
   /**
-   * FIXED (silent bug): this query selected `next_billing_date`, but the
-   * subscriptions table this app actually writes uses `renewal_date`
-   * (see Subscriptions.tsx insert + the renewal UI there). Postgres returned
-   * a "column does not exist" error, the `if (error) return` swallowed it,
-   * and the bell NEVER showed a single alert. Now using the real column —
-   * and logging the error instead of discarding it.
+   * Renewal alerts — now live.
+   *
+   * Before: fetched once when userId resolved, so adding/editing a
+   * subscription never updated the bell until a full page reload.
+   *
+   * Now:
+   *  1) loads on mount,
+   *  2) re-loads on any change to this user's subscriptions (Supabase realtime),
+   *  3) re-loads when the tab becomes visible again (covers day rollover).
+   *
+   * Requires realtime on the table:
+   *   alter publication supabase_realtime add table subscriptions;
    */
   useEffect(() => {
     if (!userId) return;
 
     let cancelled = false;
 
-    supabase
-      .from('subscriptions')
-      .select('id, name, cost, renewal_date')
-      .eq('user_id', userId)
-      .not('renewal_date', 'is', null)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error('Renewal alerts fetch error:', error.message);
-          return;
-        }
-        if (!data) return;
+    const loadAlerts = async () => {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('id, name, cost, renewal_date')
+        .eq('user_id', userId)
+        .not('renewal_date', 'is', null);
 
-        // renewal_date is a date-only string ("YYYY-MM-DD"). Parsing it with
-        // `new Date()` treats it as UTC midnight, which shifts the day in
-        // negative-UTC-offset timezones — so we build a local Date explicitly.
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+      if (cancelled) return;
+      if (error) {
+        console.error('Renewal alerts fetch error:', error.message);
+        return;
+      }
+      if (!data) return;
 
-        const soon = data
-          .map((sub: { id: number; name: string; cost: number; renewal_date: string }) => {
-            const [y, m, d] = sub.renewal_date.split('-').map(Number);
-            const due = new Date(y, (m || 1) - 1, d || 1);
-            due.setHours(0, 0, 0, 0);
-            const daysUntilRenewal = Math.round((due.getTime() - today.getTime()) / DAY_MS);
-            return { id: sub.id, name: sub.name, cost: sub.cost, daysUntilRenewal };
-          })
-          .filter((s) => s.daysUntilRenewal >= 0 && s.daysUntilRenewal <= ALERT_WINDOW_DAYS)
-          .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal);
+      // renewal_date is a date-only string ("YYYY-MM-DD"). Parsing it with
+      // `new Date()` treats it as UTC midnight, which shifts the day in
+      // negative-UTC-offset timezones — so we build a local Date explicitly.
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-        setAlerts(soon);
-      });
+      const soon = data
+        .map((sub: { id: number; name: string; cost: number; renewal_date: string }) => {
+          const [y, m, d] = sub.renewal_date.split('-').map(Number);
+          const due = new Date(y, (m || 1) - 1, d || 1);
+          due.setHours(0, 0, 0, 0);
+          const daysUntilRenewal = Math.round((due.getTime() - today.getTime()) / DAY_MS);
+          return { id: sub.id, name: sub.name, cost: sub.cost, daysUntilRenewal };
+        })
+        .filter((s) => s.daysUntilRenewal >= 0 && s.daysUntilRenewal <= ALERT_WINDOW_DAYS)
+        .sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal);
+
+      setAlerts(soon);
+    };
+
+    // 1) Initial load
+    loadAlerts();
+
+    // 2) Refresh whenever a subscription changes
+    const channel = supabase
+      .channel(`navbar-alerts-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
+        () => loadAlerts()
+      )
+      .subscribe();
+
+    // 3) Refresh when the tab regains focus (e.g. day changed overnight)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadAlerts();
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       cancelled = true;
+      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [userId]);
 
