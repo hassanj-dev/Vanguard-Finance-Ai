@@ -21,7 +21,7 @@ const HELP_TEXT = `Commands:
 • task daily stretch — add a daily task
 • task weekly clean car — add a weekly task
 • done buy milk — mark a task complete
-• sub netflix 15 — add/update a subscription
+• sub netflix 15 — add/update a subscription (renewal date defaults to today if new)
 • sub netflix 15 2026-10-05 — same, plus set its renewal date (get a WhatsApp alert 3 days before)
 • renew netflix 2026-11-05 — update just the renewal date
 • income 20000 — set monthly income
@@ -97,7 +97,7 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
     m = text.match(/^renew\s+(.+?)\s+(\d{4}-\d{2}-\d{2})$/i);
     if (m) {
       const name = m[1].trim();
-      const nextRenewalDate = m[2];
+      const renewalDate = m[2];
       const { data: existing, error: findError } = await supabaseAdmin
         .from('subscriptions')
         .select('id')
@@ -110,10 +110,10 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
       }
       const { error } = await supabaseAdmin
         .from('subscriptions')
-        .update({ next_renewal_date: nextRenewalDate })
+        .update({ renewal_date: renewalDate })
         .eq('id', existing[0].id);
       if (error) throw error;
-      return `${name} renewal date set to ${nextRenewalDate} ✅`;
+      return `${name} renewal date set to ${renewalDate} ✅`;
     }
 
     // ── sub netflix 15  [YYYY-MM-DD]  (insert, or update if it exists) ──
@@ -121,7 +121,7 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
     if (m) {
       const name = m[1].trim();
       const cost = parseFloat(m[2]);
-      const nextRenewalDate = m[4] ?? null;
+      const explicitDate = m[4] ?? null;
 
       const { data: existing, error: findError } = await supabaseAdmin
         .from('subscriptions')
@@ -131,26 +131,34 @@ export async function handleIncomingMessage(fromNumber: string, rawText: string)
         .limit(1);
       if (findError) throw findError;
 
-      const dateNote = nextRenewalDate ? `, renews ${nextRenewalDate}` : '';
-
       if (existing && existing.length > 0) {
+        // Updating an existing subscription: only touch renewal_date if a
+        // date was actually given in the message — don't silently wipe out
+        // a date you set earlier just because you texted a cost update.
         const updatePayload: Record<string, unknown> = { cost };
-        if (nextRenewalDate) updatePayload.next_renewal_date = nextRenewalDate;
+        if (explicitDate) updatePayload.renewal_date = explicitDate;
         const { error } = await supabaseAdmin
           .from('subscriptions')
           .update(updatePayload)
           .eq('id', existing[0].id);
         if (error) throw error;
+        const dateNote = explicitDate ? `, renews ${explicitDate}` : '';
         return `Updated ${name}: $${cost}/mo${dateNote} ✅`;
       }
+
+      // New subscription: match the same default your Subscriptions page
+      // uses — if no date was given, default to today. (This does mean it's
+      // immediately inside the alert window; use "sub name cost date" to
+      // set a real future date and skip that.)
+      const renewalDate = explicitDate ?? new Date().toISOString().split('T')[0];
       const { error } = await supabaseAdmin.from('subscriptions').insert({
         user_id: OWNER_USER_ID,
         name,
         cost,
-        next_renewal_date: nextRenewalDate,
+        renewal_date: renewalDate,
       });
       if (error) throw error;
-      return `Added subscription: ${name} — $${cost}/mo${dateNote} ✅`;
+      return `Added subscription: ${name} — $${cost}/mo, renews ${renewalDate} ✅`;
     }
 
     // ── income 20000 ─────────────────────────────────────────────────

@@ -27,6 +27,7 @@ export default function AddEntryModal({
   const [activeTab, setActiveTab] = useState<EntryTab>(defaultTab);
   const [subName, setSubName] = useState('');
   const [subCost, setSubCost] = useState('');
+  const [subRenewalDate, setSubRenewalDate] = useState('');
   const [taskName, setTaskName] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence>('none');
   const [weightVal, setWeightVal] = useState('');
@@ -72,6 +73,7 @@ export default function AddEntryModal({
   const resetFields = () => {
     setSubName('');
     setSubCost('');
+    setSubRenewalDate('');
     setTaskName('');
     setRecurrence('none');
     setWeightVal('');
@@ -110,9 +112,21 @@ export default function AddEntryModal({
         }
         if (cost < 0) throw new Error('Cost cannot be negative.');
 
-        const { error } = await supabase
-          .from('subscriptions')
-          .insert([{ user_id: user.id, name: subName.trim(), cost }]);
+        // Same default as the Subscriptions page: if no date is picked,
+        // use today. This is also the column the WhatsApp renewal-alert
+        // cron reads from, so setting it here (instead of leaving it out)
+        // is what makes alerts work for subscriptions added from this
+        // quick-add modal too.
+        const renewalDate = subRenewalDate || new Date().toISOString().split('T')[0];
+
+        const { error } = await supabase.from('subscriptions').insert([
+          {
+            user_id: user.id,
+            name: subName.trim(),
+            cost,
+            renewal_date: renewalDate,
+          },
+        ]);
         if (error) throw error;
       } else if (activeTab === 'todo') {
         const task = taskName.trim();
@@ -231,6 +245,17 @@ export default function AddEntryModal({
                 className="w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-xs text-[var(--text)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent-soft)]"
                 required
               />
+              <div>
+                <label className="mb-1.5 block text-[11px] font-medium text-[var(--muted)]">
+                  Renewal date (optional — defaults to today)
+                </label>
+                <input
+                  type="date"
+                  value={subRenewalDate}
+                  onChange={(e) => setSubRenewalDate(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--line)] bg-[var(--panel-2)] p-2.5 text-xs text-[var(--text)] outline-none focus:border-[var(--accent-soft)]"
+                />
+              </div>
             </>
           )}
 

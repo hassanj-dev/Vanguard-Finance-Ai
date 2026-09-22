@@ -22,9 +22,10 @@ const RENEWAL_ALERT_WINDOW_DAYS = 3; // alert this many days before renewal
 //      Body: "Heads up — you've used {{1}}% of your ${{2}} monthly budget."
 //
 //   2) Name: subscription_renewal_alert   Category: Utility
-//      Body: "Your {{1}} subscription (${{2}}/mo) renews on {{3}}."
+//      Body: "Your {{1}} subscription (${{2}}/mo) is renewing on {{3}}.
+//             Manage or cancel it before the renewal date if needed."
 //
-// Wait for approval (usually fast), then this route can use them.
+// Wait for approval, then this route can use them.
 //
 // vercel.json wires this to run once a day (Hobby plan minimum interval):
 //   { "crons": [{ "path": "/api/cron/alerts", "schedule": "0 8 * * *" }] }
@@ -103,11 +104,14 @@ async function checkBudgetAlert() {
 }
 
 async function checkSubscriptionRenewals() {
+  // renewal_date is the column your Subscriptions page already uses —
+  // this now reads the same data that page shows, instead of a separate
+  // column only the WhatsApp bot knew about.
   const { data: subs, error } = await supabaseAdmin
     .from('subscriptions')
-    .select('id, name, cost, next_renewal_date')
+    .select('id, name, cost, renewal_date')
     .eq('user_id', OWNER_USER_ID)
-    .not('next_renewal_date', 'is', null);
+    .not('renewal_date', 'is', null);
 
   if (error || !subs) return { error: error?.message ?? 'query failed' };
 
@@ -118,7 +122,7 @@ async function checkSubscriptionRenewals() {
   const skipped: string[] = [];
 
   for (const sub of subs) {
-    const renewalDate = new Date(sub.next_renewal_date as string);
+    const renewalDate = new Date(sub.renewal_date as string);
     renewalDate.setHours(0, 0, 0, 0);
 
     const daysUntil = Math.round((renewalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -129,7 +133,7 @@ async function checkSubscriptionRenewals() {
 
     // One alert per subscription per renewal date — once you push the date
     // forward with "renew <name> <date>", a fresh key means a fresh alert.
-    const alertKey = `sub_${sub.id}_${sub.next_renewal_date}`;
+    const alertKey = `sub_${sub.id}_${sub.renewal_date}`;
     if (await alreadySent(alertKey)) {
       skipped.push(sub.name);
       continue;
@@ -139,7 +143,7 @@ async function checkSubscriptionRenewals() {
       OWNER_WHATSAPP_NUMBER,
       'subscription_renewal_alert',
       'en_US',
-      [sub.name, String(sub.cost), sub.next_renewal_date as string]
+      [sub.name, String(sub.cost), sub.renewal_date as string]
     );
 
     if (sent) {
